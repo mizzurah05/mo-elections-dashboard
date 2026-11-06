@@ -50,6 +50,15 @@ def get_election_data(table_name):
     
     if not df.empty:
         df['mapping_precinct_code'] = df['mapping_precinct_code'].astype(str).str.upper()
+        
+        # ==========================================
+        # 🚨 THE FIX: Standardize ballot names on load 🚨
+        # ==========================================
+        if 'race' in df.columns:
+            df['race'] = df['race'].astype(str).str.replace('CONSTITUTIONAL ', '', regex=False)
+            df['race'] = df['race'].str.replace('NO. ', '', regex=False)
+            df['race'] = df['race'].str.strip()
+            
     return df
 
 # ==========================================
