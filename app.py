@@ -22,6 +22,10 @@ def get_shapefile():
     
     df = pd.read_csv(file_path)
     
+    # NEW FIX: Rename the column if the CSV uses the raw BigQuery name
+    if 'shape_geometry' in df.columns and 'geometry' not in df.columns:
+        df = df.rename(columns={'shape_geometry': 'geometry'})
+    
     # Parse the heavy geometry strings once
     df['geometry'] = df['geometry'].apply(lambda x: wkt.loads(x) if pd.notnull(x) else None)
     
