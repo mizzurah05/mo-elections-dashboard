@@ -116,7 +116,7 @@ if dataset_type == "Legislative Races":
     sorted_races = sorted(chamber_races, key=natural_sort_key)
 else:
     with col2:
-        st.info("Mapping NO votes to Blue and YES votes to Red.")
+        st.info("Mapping NO votes to Blue/Green and YES votes to Red (Reversed for Amd 6).")
     sorted_races = sorted(valid_races, key=natural_sort_key)
 
 # 3. Select Race (Col 3)
@@ -148,18 +148,22 @@ if not election_df.empty:
         
         blue_label, red_label = 'Dem Votes', 'Rep Votes'
         pct_label = 'Dem %'
-        bucket_labels = ['< 30% Dem', '30-40% Dem', '40-50% Dem', '50-60% Dem', '60-70% Dem', '> 70% Dem']
         
     else: 
         raw_df['YES'] = pd.to_numeric(raw_df.get('YES', 0), errors='coerce').fillna(0)
         raw_df['NO'] = pd.to_numeric(raw_df.get('NO', 0), errors='coerce').fillna(0)
         
-        raw_df['Unified_Blue'] = raw_df['NO']  
-        raw_df['Unified_Red'] = raw_df['YES']  
-        
-        blue_label, red_label = 'NO Votes', 'YES Votes'
-        pct_label = 'NO %'
-        bucket_labels = ['< 30% NO', '30-40% NO', '40-50% NO', '50-60% NO', '60-70% NO', '> 70% NO']
+        # Reverse target metrics for Amendment 6 ONLY
+        if "AMENDMENT 6" in str(selected_race).upper():
+            raw_df['Unified_Blue'] = raw_df['YES']  
+            raw_df['Unified_Red'] = raw_df['NO']  
+            blue_label, red_label = 'YES Votes', 'NO Votes'
+            pct_label = 'YES %'
+        else:
+            raw_df['Unified_Blue'] = raw_df['NO']  
+            raw_df['Unified_Red'] = raw_df['YES']  
+            blue_label, red_label = 'NO Votes', 'YES Votes'
+            pct_label = 'NO %'
 
    # 3. AGGREGATE SPLIT PRECINCTS
     agg_dict = {
@@ -171,21 +175,27 @@ if not election_df.empty:
     
     precinct_col = 'precinct' if 'precinct' in raw_df.columns else 'precinctname' if 'precinctname' in raw_df.columns else 'mapping_precinct_code'
     
-    # NEW LOGIC: Only aggregate the precinct name if it is DIFFERENT from the grouping column
+    # Only aggregate the precinct name if it is DIFFERENT from the grouping column
     if precinct_col != 'mapping_precinct_code':
         if precinct_col != 'mapping_precinct_code': agg_dict[precinct_col] = 'first'
     
     if county_col: agg_dict[county_col] = 'first'
     if 'race' in raw_df.columns: agg_dict['race'] = 'first'
     
-    # This now runs safely for ALL counties
+    # Runs safely for ALL counties
     master_df = raw_df.groupby('mapping_precinct_code').agg(agg_dict).reset_index()
     master_df['precinct_id'] = master_df.index.astype(str)
     
-    # 4. SHARED PERCENTAGE CALCULATION
+    # 4. 14-STEP PERCENTAGE CALCULATION
     master_df['Blue_Percent'] = (master_df['Unified_Blue'] / master_df['total_votes'] * 100).fillna(0).clip(0, 100) 
     
-    bins = [-1, 30, 40, 50, 60, 70, 101]
+    bins = [-1, 20, 25, 30, 35, 40, 45, 50, 55, 60, 65, 70, 75, 80, 101]
+    bucket_labels = [
+        '< 20%', '20–25%', '25–30%', '30–35%', '35–40%', 
+        '40–45%', '45–50%', '50–55%', '55–60%', '60–65%', 
+        '65–70%', '70–75%', '75–80%', '> 80%'
+    ]
+    
     master_df['Margin'] = pd.cut(master_df['Blue_Percent'], bins=bins, labels=bucket_labels)
     
     gray_label = '< 5 Votes (Gray)'
@@ -216,12 +226,12 @@ if not election_df.empty:
     st.sidebar.markdown(
         f"""
         <div style="padding:10px; border-radius:5px; background-color:#f0f2f6; margin-bottom:10px;">
-            <h4 style="margin:0; color:#2166ac;">🟦 {blue_label}</h4>
-            <h2 style="margin:0; color:#2166ac;">{total_region_blue:,} <span style="font-size:16px;">({pct_region_blue:.1f}%)</span></h2>
+            <h4 style="margin:0; color:#138c4a;">🟩 {blue_label}</h4>
+            <h2 style="margin:0; color:#138c4a;">{total_region_blue:,} <span style="font-size:16px;">({pct_region_blue:.1f}%)</span></h2>
         </div>
         <div style="padding:10px; border-radius:5px; background-color:#f0f2f6;">
-            <h4 style="margin:0; color:#b2182b;">🟥 {red_label}</h4>
-            <h2 style="margin:0; color:#b2182b;">{total_region_red:,} <span style="font-size:16px;">({pct_region_red:.1f}%)</span></h2>
+            <h4 style="margin:0; color:#ca2427;">🟥 {red_label}</h4>
+            <h2 style="margin:0; color:#ca2427;">{total_region_red:,} <span style="font-size:16px;">({pct_region_red:.1f}%)</span></h2>
         </div>
         """, unsafe_allow_html=True
     )
@@ -248,13 +258,21 @@ if not election_df.empty:
 
     # 7. RENDER MAP
     bucket_colors = {
-        bucket_labels[0]: '#b2182b',
-        bucket_labels[1]: '#d6604d',
-        bucket_labels[2]: '#f4a582',
-        bucket_labels[3]: '#92c5de',
-        bucket_labels[4]: '#4393c3',
-        bucket_labels[5]: '#2166ac',
-        gray_label: '#d3d3d3'
+        '< 20%': '#a50026',    # Deepest Red
+        '20–25%': '#ca2427',
+        '25–30%': '#e65036',
+        '30–35%': '#f7814c',
+        '35–40%': '#fdb163',
+        '40–45%': '#fed884',
+        '45–50%': '#fff3ac',   
+        '50–55%': '#f1f9ac',   
+        '55–60%': '#d1ec86',
+        '60–65%': '#a9da6c',
+        '65–70%': '#7ac665',
+        '70–75%': '#42ac5a',
+        '75–80%': '#138c4a',
+        '> 80%': '#006837',    # Deepest Green
+        gray_label: '#d3d3d3'  # Gray for low/no votes
     }
 
     if not gdf.empty:
