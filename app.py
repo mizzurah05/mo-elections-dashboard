@@ -161,7 +161,7 @@ if not election_df.empty:
         pct_label = 'NO %'
         bucket_labels = ['< 30% NO', '30-40% NO', '40-50% NO', '50-60% NO', '60-70% NO', '> 70% NO']
 
-    # 3. AGGREGATE SPLIT PRECINCTS
+   # 3. AGGREGATE SPLIT PRECINCTS
     agg_dict = {
         'Unified_Blue': 'sum',
         'Unified_Red': 'sum',
@@ -170,11 +170,15 @@ if not election_df.empty:
     }
     
     precinct_col = 'precinct' if 'precinct' in raw_df.columns else 'precinctname' if 'precinctname' in raw_df.columns else 'mapping_precinct_code'
-    agg_dict[precinct_col] = 'first'
+    
+    # NEW LOGIC: Only aggregate the precinct name if it is DIFFERENT from the grouping column
+    if precinct_col != 'mapping_precinct_code':
+        agg_dict[precinct_col] = 'first'
     
     if county_col: agg_dict[county_col] = 'first'
     if 'race' in raw_df.columns: agg_dict['race'] = 'first'
     
+    # This now runs safely for ALL counties
     master_df = raw_df.groupby('mapping_precinct_code').agg(agg_dict).reset_index()
     master_df['precinct_id'] = master_df.index.astype(str)
     
