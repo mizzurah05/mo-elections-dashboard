@@ -109,9 +109,9 @@ if dataset_type == "Legislative Races":
     if chamber == "State House (HD)": 
         chamber_races = [r for r in valid_races if 'REP' in r.upper() or 'HOUSE' in r.upper()]
     elif chamber == "State Senate (SD)": 
-        chamber_races = [r for r in valid_races if 'SEN' in r.upper()]
+        chamber_races = [r for r in valid_races if 'SENAT' in r.upper()]
     else: 
-        chamber_races = [r for r in valid_races if 'REP' not in r.upper() and 'HOUSE' not in r.upper() and 'SEN' not in r.upper()]
+        chamber_races = [r for r in valid_races if 'REP' not in r.upper() and 'HOUSE' not in r.upper() and 'SENAT' not in r.upper()]
         
     sorted_races = sorted(chamber_races, key=natural_sort_key)
 else:
