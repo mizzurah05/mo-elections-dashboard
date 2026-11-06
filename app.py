@@ -5,25 +5,27 @@ from shapely import wkt
 import plotly.express as px
 import math
 import numpy as np
+import re
+import os
 
 # Set up the webpage
 st.set_page_config(page_title="MO Elections Master", layout="wide")
 st.title("Missouri 2026 Elections Dashboard")
 
-# =========================================================
-# 🚀 OFFLINE DATA LOADING (Reads local CSVs instantly)
-# =========================================================
-
-# 1. Fetch Shapes ONLY ONCE, simplify, and hold in memory
+# ==========================================
+# 1. Fetch Shapes from Local CSV
+# ==========================================
 @st.cache_data
 def get_shapefile():
-    # Reads the CSV you just downloaded directly from your folder!
-    df = pd.read_csv("precincts_shape_2026.csv")
+    # Checks current folder or processed_data folder
+    file_path = "precincts_shape_2026.csv" if os.path.exists("precincts_shape_2026.csv") else "processed_data/precincts_shape_2026.csv"
     
-    # Parse the heavy geometry strings 
-    df['geometry'] = df['shape_geometry'].apply(lambda x: wkt.loads(x) if pd.notnull(x) else None)
+    df = pd.read_csv(file_path)
     
-    # SIMPLIFY POLYGONS: Removes microscopic detail to speed up browser rendering
+    # Parse the heavy geometry strings once
+    df['geometry'] = df['geometry'].apply(lambda x: wkt.loads(x) if pd.notnull(x) else None)
+    
+    # 🚀 SIMPLIFY POLYGONS: Removes microscopic detail to speed up browser rendering
     gdf = gpd.GeoDataFrame(df, geometry='geometry', crs="EPSG:4326")
     gdf['geometry'] = gdf['geometry'].simplify(0.001)
     
@@ -32,11 +34,15 @@ def get_shapefile():
     
     return gdf
 
-# 2. Fetch lightweight election numbers ONCE per table
+# ==========================================
+# 2. Fetch Election Data from Local CSVs
+# ==========================================
 @st.cache_data
 def get_election_data(table_name):
-    # Reads the CSV file directly from your folder!
-    df = pd.read_csv(f"{table_name}.csv")
+    # Matches the files downloaded by your download_all_data.py script
+    file_path = f"{table_name}.csv" if os.path.exists(f"{table_name}.csv") else f"processed_data/{table_name}.csv"
+    
+    df = pd.read_csv(file_path)
     
     if not df.empty:
         df['mapping_precinct_code'] = df['mapping_precinct_code'].astype(str).str.upper()
@@ -49,72 +55,84 @@ def get_election_data(table_name):
 dataset_type = st.radio("Select Election Category:", ["Legislative Races", "Ballot Measures"], horizontal=True)
 col1, col2, col3 = st.columns([1, 1, 1])
 
-# Determine the table name (which now matches the CSV filename)
+# Determine which CSV to load based on the toggle
 table_name = "legislative_races" if dataset_type == "Legislative Races" else "ballot_measures"
 
 # Load the full datasets into memory instantly from cache
-with st.spinner("Loading database into memory..."):
-    try:
-        full_election_df = get_election_data(table_name)
-        shapes_df = get_shapefile()
-    except FileNotFoundError as e:
-        st.error(f"Missing file! Please ensure {table_name}.csv and precincts_shape_2026.csv are in the same folder as this script.")
-        st.stop()
+with st.spinner("Loading offline CSV data..."):
+    full_election_df = get_election_data(table_name)
+    shapes_df = get_shapefile()
 
 if full_election_df.empty:
-    st.error(f"No data found in {table_name}.csv.")
+    st.error(f"Error fetching data from {table_name}.csv.")
     st.stop()
 
-# Build dropdowns locally
-all_races = sorted(full_election_df['race'].dropna().unique().tolist())
+# Ensure total_votes is numeric so we can sum it to find "ghost" races
+full_election_df['total_votes'] = pd.to_numeric(full_election_df.get('total_votes', 0), errors='coerce').fillna(0)
 
-if dataset_type == "Legislative Races":
-    hd_races = [r for r in all_races if 'REP' in r.upper() or 'HOUSE' in r.upper()]
-    sd_races = [r for r in all_races if 'SEN' in r.upper()]
-    other_races = [r for r in all_races if r not in hd_races and r not in sd_races]
-    
+# ==========================================
+# CASCADING DROPDOWNS: County -> Chamber -> Race
+# ==========================================
+
+# 1. Select County (Col 1)
+county_col = 'County' if 'County' in full_election_df.columns else 'county' if 'county' in full_election_df.columns else None
+if county_col:
+    county_list = ["ALL"] + sorted(full_election_df[county_col].dropna().unique().tolist())
     with col1:
-        chamber = st.radio("Select Chamber:", ["State House (HD)", "State Senate (SD)", "Other"])
-        
-    if chamber == "State House (HD)": race_options = hd_races
-    elif chamber == "State Senate (SD)": race_options = sd_races
-    else: race_options = other_races
-    
+        selected_county = st.selectbox("Filter by County:", county_list)
 else:
-    race_options = all_races
-    with col1:
-        st.info("Mapping NO votes to Blue and YES votes to Red.")
+    selected_county = "ALL"
 
-with col2:
-    if not race_options:
-        st.warning(f"No races found for this selection.")
+# Filter data to the selected county so we can accurately check for votes
+if selected_county != "ALL":
+    county_df = full_election_df[full_election_df[county_col] == selected_county].copy()
+else:
+    county_df = full_election_df.copy()
+
+# Strip "Ghost Races": Group by race and only keep races with > 0 total votes in this specific county
+race_totals = county_df.groupby('race')['total_votes'].sum()
+valid_races = race_totals[race_totals > 0].index.tolist()
+
+def natural_sort_key(s):
+    # Extracts numbers so 'District 2' comes before 'District 10'
+    return [int(text) if text.isdigit() else text.lower() for text in re.split(r'(\d+)', str(s))]
+
+# 2. Select Chamber (Col 2) & Filter Races
+if dataset_type == "Legislative Races":
+    with col2:
+        chamber = st.selectbox("Select Chamber:", ["State House (HD)", "State Senate (SD)", "Other"])
+        
+    if chamber == "State House (HD)": 
+        chamber_races = [r for r in valid_races if 'REP' in r.upper() or 'HOUSE' in r.upper()]
+    elif chamber == "State Senate (SD)": 
+        chamber_races = [r for r in valid_races if 'SEN' in r.upper()]
+    else: 
+        chamber_races = [r for r in valid_races if 'REP' not in r.upper() and 'HOUSE' not in r.upper() and 'SEN' not in r.upper()]
+        
+    sorted_races = sorted(chamber_races, key=natural_sort_key)
+else:
+    with col2:
+        st.info("Mapping NO votes to Blue and YES votes to Red.")
+    sorted_races = sorted(valid_races, key=natural_sort_key)
+
+# 3. Select Race (Col 3)
+with col3:
+    if not sorted_races:
+        st.warning(f"No valid races found for this selection.")
         st.stop()
-    dropdown_options = ["ALL"] + race_options
+    dropdown_options = ["ALL"] + sorted_races
     selected_race = st.selectbox("Select Race / Measure:", dropdown_options)
 
 # 🚀 FILTER LOCALLY IN PANDAS 
 if selected_race == "ALL":
-    election_df = full_election_df[full_election_df['race'].isin(race_options)].copy()
+    election_df = county_df[county_df['race'].isin(sorted_races)].copy()
 else:
-    election_df = full_election_df[full_election_df['race'] == selected_race].copy()
+    election_df = county_df[county_df['race'] == selected_race].copy()
 
 if not election_df.empty:
     
     # 🚀 MERGE IN PANDAS 
     raw_df = pd.merge(election_df, shapes_df, on='mapping_precinct_code', how='left')
-    
-    # 1. COUNTY FILTERING
-    selected_county = "ALL"
-    county_col = 'County' if 'County' in raw_df.columns else 'county' if 'county' in raw_df.columns else None
-    if county_col:
-        county_list = ["ALL"] + sorted(raw_df[county_col].dropna().unique().tolist())
-        with col3:
-            selected_county = st.selectbox("Filter by County:", county_list)
-        if selected_county != "ALL":
-            raw_df = raw_df[raw_df[county_col] == selected_county]
-            
-    # Ensure totals are numeric
-    raw_df['total_votes'] = pd.to_numeric(raw_df['total_votes'], errors='coerce').fillna(0)
             
     # 2. CALCULATE UNIFIED VOTES ON FULL DATASET
     if dataset_type == "Legislative Races":
@@ -239,7 +257,7 @@ if not election_df.empty:
         zoom_level = max(5.0, math.log2(360 / max_span) - 1.2) if max_span > 0 else 8.0
 
         hover_dict = {
-            precinct_col: False, # Hide duplicate title
+            precinct_col: False, 
             'race': True,
             'total_votes': True,
             'Unified_Blue': True,
