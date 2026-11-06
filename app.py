@@ -51,7 +51,9 @@ def get_election_data(table_name):
     if not df.empty:
         df['mapping_precinct_code'] = df['mapping_precinct_code'].astype(str).str.upper()
     return df
-
+master_df['race'] = master_df['race'].astype(str).str.replace('CONSTITUTIONAL ', '', regex=False)
+master_df['race'] = master_df['race'].str.replace('NO. ', '', regex=False)
+master_df['race'] = master_df['race'].str.strip()
 # ==========================================
 # DASHBOARD UI
 # ==========================================
