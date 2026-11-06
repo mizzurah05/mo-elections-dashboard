@@ -136,7 +136,7 @@ else:
 if not election_df.empty:
     
     # 🚀 MERGE IN PANDAS 
-    raw_df = pd.merge(election_df, shapes_df, on='mapping_precinct_code', how='left')
+    raw_df = pd.merge(election_df, shapes_df[['mapping_precinct_code', 'geometry']], on='mapping_precinct_code', how='left')
             
     # 2. CALCULATE UNIFIED VOTES ON FULL DATASET
     if dataset_type == "Legislative Races":
