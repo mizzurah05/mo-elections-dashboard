@@ -173,7 +173,7 @@ if not election_df.empty:
     
     # NEW LOGIC: Only aggregate the precinct name if it is DIFFERENT from the grouping column
     if precinct_col != 'mapping_precinct_code':
-        agg_dict[precinct_col] = 'first'
+        if precinct_col != 'mapping_precinct_code': agg_dict[precinct_col] = 'first'
     
     if county_col: agg_dict[county_col] = 'first'
     if 'race' in raw_df.columns: agg_dict['race'] = 'first'
