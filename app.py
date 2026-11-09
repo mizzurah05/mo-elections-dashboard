@@ -265,25 +265,24 @@ if not election_df.empty:
                 f"**{tot_red:,}** {red_label} ({red_pct:.1f}%)"
             )
 
-    # 7. RENDER MAP
+# 7. RENDER MAP
     bucket_colors = {
-        '< 20%': '#a50026',    # Deepest Red
-        '20–25%': '#ca2427',
-        '25–30%': '#e65036',
-        '30–35%': '#f7814c',
-        '35–40%': '#fdb163',
-        '40–45%': '#fed884',
-        '45–50%': '#fff3ac',   
-        '50–55%': '#f1f9ac',   
-        '55–60%': '#d1ec86',
-        '60–65%': '#a9da6c',
-        '65–70%': '#7ac665',
-        '70–75%': '#42ac5a',
-        '75–80%': '#138c4a',
-        '> 80%': '#006837',    # Deepest Green
-        gray_label: '#d3d3d3'  # Gray for low/no votes
+        '< 20%': '#642b1a',      
+        '20–25%': '#8b3d23',     
+        '25–30%': '#a75235',     
+        '30–35%': '#c87659',     
+        '35–40%': '#e49b80',     
+        '40–45%': '#f3c4b5',     
+        '45–50%': '#fbe2dc',     
+        '50–55%': '#e8e6e1',     
+        '55–60%': '#dceadc',     
+        '60–65%': '#b8d5b8',     
+        '65–70%': '#95c095',     
+        '70–75%': '#6cac6c',     
+        '75–80%': '#469146',     
+        '> 80%': '#215c21',      
+        gray_label: '#3a3a3a'    
     }
-
     if not gdf.empty:
         bounds = gdf.total_bounds  
         center_lon = (bounds[0] + bounds[2]) / 2
