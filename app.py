@@ -3,7 +3,6 @@ import pandas as pd
 import geopandas as gpd
 from shapely import wkt
 import plotly.express as px
-import plotly.graph_objects as go
 import math
 import numpy as np
 import re
@@ -28,14 +27,12 @@ st.markdown("""
     --no-3: #b8442a;
     --no-4: #8f2d18;
     --border-subtle: #e2e8f0;
-    --muted-bg: #f4f6f9;
 }
 
 html, body, [class*="css"] {
     font-family: 'Figtree', -apple-system, BlinkMacSystemFont, sans-serif;
 }
 
-/* Hide default Streamlit top padding & menu clutter */
 .block-container {
     padding-top: 1.25rem !important;
     padding-bottom: 3rem !important;
@@ -49,7 +46,7 @@ html, body, [class*="css"] {
     padding: 1.1rem 1.5rem;
     border-radius: 8px;
     border-bottom: 3px solid var(--brand-red);
-    margin-bottom: 1.25rem;
+    margin-bottom: 1rem;
     display: flex;
     flex-wrap: wrap;
     justify-content: space-between;
@@ -76,6 +73,26 @@ html, body, [class*="css"] {
     font-size: 0.78rem;
     color: #cbd5e1;
     font-weight: 500;
+}
+
+/* Bold Selector Bar (Dark & Light Mode Safe) */
+div[data-testid="stRadio"] > label {
+    font-size: 0.72rem !important;
+    font-weight: 800 !important;
+    text-transform: uppercase !important;
+    letter-spacing: 0.12em !important;
+    opacity: 0.85;
+}
+div[data-testid="stRadio"] div[role="radiogroup"] {
+    background-color: rgba(30, 78, 140, 0.10);
+    border: 1px solid rgba(148, 163, 184, 0.45);
+    border-radius: 8px;
+    padding: 0.4rem 0.85rem;
+    gap: 1.25rem;
+}
+div[data-testid="stRadio"] div[role="radiogroup"] label p {
+    font-size: 0.96rem !important;
+    font-weight: 700 !important;
 }
 
 /* Editorial Section Header */
@@ -189,7 +206,7 @@ html, body, [class*="css"] {
     height: 11px;
     border-radius: 3px;
     overflow: hidden;
-    background-color: #e2e8f0;
+    background-color: rgba(148, 163, 184, 0.25);
     margin: 0.55rem 0;
 }
 .split-bar-our {
@@ -263,47 +280,16 @@ def get_election_data(table_name):
 def natural_sort_key(s):
     return [int(text) if text.isdigit() else text.lower() for text in re.split(r'(\d+)', str(s))]
 
-# Measure campaign metadata by election year
 MEASURE_META_BY_YEAR = {
     "2026 General": {
-        "AMENDMENT 3": {
-            "title": "Amendment 3",
-            "subtitle": "Stop the Ban",
-            "our_side": "NO",
-            "other_side": "YES",
-        },
-        "AMENDMENT 6": {
-            "title": "Amendment 6",
-            "subtitle": "Respect Missouri Voters",
-            "our_side": "YES",
-            "other_side": "NO",
-        },
-        "PROPOSITION A": {
-            "title": "Proposition A",
-            "subtitle": "People Not Politicians",
-            "our_side": "NO",
-            "other_side": "YES",
-        },
+        "AMENDMENT 3": {"title": "Amendment 3", "subtitle": "Stop the Ban", "our_side": "NO", "other_side": "YES"},
+        "AMENDMENT 6": {"title": "Amendment 6", "subtitle": "Respect Missouri Voters", "our_side": "YES", "other_side": "NO"},
+        "PROPOSITION A": {"title": "Proposition A", "subtitle": "People Not Politicians", "our_side": "NO", "other_side": "YES"},
     },
     "2022 General": {
-        "AMENDMENT 3": {
-            "title": "Amendment 3",
-            "subtitle": "Legal Marijuana Initiative",
-            "our_side": "YES",
-            "other_side": "NO",
-        },
-        "AMENDMENT 4": {
-            "title": "Amendment 4",
-            "subtitle": "KC Police Funding Mandate",
-            "our_side": "YES",
-            "other_side": "NO",
-        },
-        "CONVENTION QUESTION": {
-            "title": "Convention Question",
-            "subtitle": "Constitutional Convention",
-            "our_side": "YES",
-            "other_side": "NO",
-        },
+        "AMENDMENT 3": {"title": "Amendment 3", "subtitle": "Legal Marijuana Initiative", "our_side": "YES", "other_side": "NO"},
+        "AMENDMENT 4": {"title": "Amendment 4", "subtitle": "KC Police Funding Mandate", "our_side": "YES", "other_side": "NO"},
+        "CONVENTION QUESTION": {"title": "Convention Question", "subtitle": "Constitutional Convention", "our_side": "YES", "other_side": "NO"},
     },
 }
 
@@ -320,38 +306,12 @@ def get_measure_our_side(year_label: str, race_name: str) -> str:
     return "YES"
 
 # ==========================================
-# TOP NAVIGATION & DATA LOADING
+# TOP NAVIGATION & SINGLE MASTHEAD
 # ==========================================
-# ==========================================
-# TOP MASTHEAD & BOLD ELECTION YEAR BAR
-# ==========================================
-st.markdown("""
-<style>
-div[data-testid="stRadio"] > label {
-    font-size: 0.72rem !important;
-    font-weight: 800 !important;
-    text-transform: uppercase !important;
-    letter-spacing: 0.12em !important;
-    color: #10243e !important;
-}
-div[data-testid="stRadio"] div[role="radiogroup"] {
-    background-color: #f4f6f9;
-    border: 1.5px solid #cbd5e1;
-    border-radius: 8px;
-    padding: 0.45rem 0.85rem;
-    gap: 1.25rem;
-}
-div[data-testid="stRadio"] div[role="radiogroup"] label p {
-    font-size: 0.98rem !important;
-    font-weight: 700 !important;
-}
-</style>
-""", unsafe_allow_html=True)
-
 nav_col1, nav_col2 = st.columns([1.0, 1.3])
 with nav_col1:
     election_year = st.radio(
-        "1 · Select Election Cycle:",
+        "Election Cycle:",
         ["2026 General", "2022 General"],
         horizontal=True,
     )
@@ -362,7 +322,7 @@ with nav_col2:
         else ["Ballot Initiatives", "Electoral Results"]
     )
     dataset_type = st.radio(
-        "2 · Select Results Section:",
+        "Results Section:",
         section_options,
         horizontal=True,
     )
@@ -392,19 +352,10 @@ st.markdown(f"""
     <div class="brand-meta">General Election · {election_date_str} · {len(loaded_counties)} Jurisdictions Loaded</div>
 </div>
 """, unsafe_allow_html=True)
-st.markdown(f"""
-<div class="team-mo-banner">
-    <div>
-        <span class="brand-title">Team MO</span>
-        <span class="brand-sub">Missouri {year_short} Precinct Election Results</span>
-    </div>
-    <div class="brand-meta">General Election · {election_date_str} · {len(loaded_counties)} Jurisdictions Loaded</div>
-</div>
-""", unsafe_allow_html=True)
 
 full_election_df = bal_full_df if dataset_type == "Ballot Initiatives" else leg_full_df
 if full_election_df.empty:
-    st.error(f"No data file found for {election_year} — {dataset_type}. Run `download_all_data.py` to pull the CSVs.")
+    st.error(f"No data file found for {election_year} — {dataset_type}. Make sure `electoral_results_2022.csv` and `ballot_measures_2022.csv` are downloaded and pushed to GitHub.")
     st.stop()
 
 county_col = 'County' if 'County' in full_election_df.columns else 'county' if 'county' in full_election_df.columns else None
@@ -870,7 +821,7 @@ if not election_df.empty:
     )
 
     # ==========================================
-    # SECTION 3: MEASURE VS. MEASURE / CROSS-RACE SCATTER (BALLOT VIEW)
+    # SECTION 3: MEASURE VS. MEASURE SCATTER
     # ==========================================
     if dataset_type == "Ballot Initiatives" and len(sorted_races) >= 2:
         st.markdown(f"""
