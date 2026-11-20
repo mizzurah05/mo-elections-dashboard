@@ -322,13 +322,38 @@ def get_measure_our_side(year_label: str, race_name: str) -> str:
 # ==========================================
 # TOP NAVIGATION & DATA LOADING
 # ==========================================
+# ==========================================
+# TOP MASTHEAD & BOLD ELECTION YEAR BAR
+# ==========================================
+st.markdown("""
+<style>
+div[data-testid="stRadio"] > label {
+    font-size: 0.72rem !important;
+    font-weight: 800 !important;
+    text-transform: uppercase !important;
+    letter-spacing: 0.12em !important;
+    color: #10243e !important;
+}
+div[data-testid="stRadio"] div[role="radiogroup"] {
+    background-color: #f4f6f9;
+    border: 1.5px solid #cbd5e1;
+    border-radius: 8px;
+    padding: 0.45rem 0.85rem;
+    gap: 1.25rem;
+}
+div[data-testid="stRadio"] div[role="radiogroup"] label p {
+    font-size: 0.98rem !important;
+    font-weight: 700 !important;
+}
+</style>
+""", unsafe_allow_html=True)
+
 nav_col1, nav_col2 = st.columns([1.0, 1.3])
 with nav_col1:
     election_year = st.radio(
-        "Election Cycle:",
+        "1 · Select Election Cycle:",
         ["2026 General", "2022 General"],
         horizontal=True,
-        label_visibility="collapsed",
     )
 with nav_col2:
     section_options = (
@@ -337,10 +362,9 @@ with nav_col2:
         else ["Ballot Initiatives", "Electoral Results"]
     )
     dataset_type = st.radio(
-        "View Section:",
+        "2 · Select Results Section:",
         section_options,
         horizontal=True,
-        label_visibility="collapsed",
     )
 
 with st.spinner(f"Loading {election_year} precinct election data..."):
@@ -359,6 +383,15 @@ loaded_counties = sorted(
 year_short = "2026" if election_year == "2026 General" else "2022"
 election_date_str = ELECTION_DATES[election_year]
 
+st.markdown(f"""
+<div class="team-mo-banner">
+    <div>
+        <span class="brand-title">Team MO</span>
+        <span class="brand-sub">Missouri {year_short} Precinct Election Results</span>
+    </div>
+    <div class="brand-meta">General Election · {election_date_str} · {len(loaded_counties)} Jurisdictions Loaded</div>
+</div>
+""", unsafe_allow_html=True)
 st.markdown(f"""
 <div class="team-mo-banner">
     <div>
