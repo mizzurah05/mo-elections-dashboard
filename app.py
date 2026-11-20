@@ -12,7 +12,7 @@ import os
 # ==========================================
 # PAGE CONFIG & TEAM MO EDITORIAL CSS
 # ==========================================
-st.set_page_config(page_title="Team MO · Missouri 2026 Results", layout="wide")
+st.set_page_config(page_title="Team MO · Missouri Election Results", layout="wide")
 
 st.markdown("""
 <style>
@@ -248,6 +248,8 @@ def get_shapefile():
 @st.cache_data
 def get_election_data(table_name):
     file_path = f"{table_name}.csv" if os.path.exists(f"{table_name}.csv") else f"processed_data/{table_name}.csv"
+    if not os.path.exists(file_path):
+        return pd.DataFrame()
     df = pd.read_csv(file_path)
     if not df.empty:
         df['mapping_precinct_code'] = df['mapping_precinct_code'].astype(str).str.upper()
@@ -261,66 +263,115 @@ def get_election_data(table_name):
 def natural_sort_key(s):
     return [int(text) if text.isdigit() else text.lower() for text in re.split(r'(\d+)', str(s))]
 
-# Measure campaign metadata matching Team MO framing
-MEASURE_META = {
-    "AMENDMENT 3": {
-        "title": "Amendment 3",
-        "subtitle": "Stop the Ban",
-        "our_side": "NO",
-        "other_side": "YES",
-        "outcome_pass": "Passed",
-        "outcome_fail": "Failed",
+# Measure campaign metadata by election year
+MEASURE_META_BY_YEAR = {
+    "2026 General": {
+        "AMENDMENT 3": {
+            "title": "Amendment 3",
+            "subtitle": "Stop the Ban",
+            "our_side": "NO",
+            "other_side": "YES",
+        },
+        "AMENDMENT 6": {
+            "title": "Amendment 6",
+            "subtitle": "Respect Missouri Voters",
+            "our_side": "YES",
+            "other_side": "NO",
+        },
+        "PROPOSITION A": {
+            "title": "Proposition A",
+            "subtitle": "People Not Politicians",
+            "our_side": "NO",
+            "other_side": "YES",
+        },
     },
-    "AMENDMENT 6": {
-        "title": "Amendment 6",
-        "subtitle": "Respect Missouri Voters",
-        "our_side": "YES",
-        "other_side": "NO",
-        "outcome_pass": "Passed",
-        "outcome_fail": "Failed",
-    },
-    "PROPOSITION A": {
-        "title": "Proposition A",
-        "subtitle": "People Not Politicians",
-        "our_side": "NO",
-        "other_side": "YES",
-        "outcome_pass": "Passed",
-        "outcome_fail": "Failed",
+    "2022 General": {
+        "AMENDMENT 3": {
+            "title": "Amendment 3",
+            "subtitle": "Legal Marijuana Initiative",
+            "our_side": "YES",
+            "other_side": "NO",
+        },
+        "AMENDMENT 4": {
+            "title": "Amendment 4",
+            "subtitle": "KC Police Funding Mandate",
+            "our_side": "YES",
+            "other_side": "NO",
+        },
+        "CONVENTION QUESTION": {
+            "title": "Convention Question",
+            "subtitle": "Constitutional Convention",
+            "our_side": "YES",
+            "other_side": "NO",
+        },
     },
 }
 
+ELECTION_DATES = {
+    "2026 General": "November 3, 2026",
+    "2022 General": "November 8, 2022",
+}
+
+def get_measure_our_side(year_label: str, race_name: str) -> str:
+    r_up = str(race_name).upper().strip()
+    year_meta = MEASURE_META_BY_YEAR.get(year_label, {})
+    if r_up in year_meta:
+        return year_meta[r_up]["our_side"]
+    return "YES"
+
 # ==========================================
-# TOP MASTHEAD & CATEGORY NAVIGATION
+# TOP NAVIGATION & DATA LOADING
 # ==========================================
-with st.spinner("Loading precinct election data..."):
-    leg_full_df = get_election_data("legislative_races")
-    bal_full_df = get_election_data("ballot_measures")
+nav_col1, nav_col2 = st.columns([1.0, 1.3])
+with nav_col1:
+    election_year = st.radio(
+        "Election Cycle:",
+        ["2026 General", "2022 General"],
+        horizontal=True,
+        label_visibility="collapsed",
+    )
+with nav_col2:
+    section_options = (
+        ["Ballot Initiatives", "State Legislature"]
+        if election_year == "2026 General"
+        else ["Ballot Initiatives", "Electoral Results"]
+    )
+    dataset_type = st.radio(
+        "View Section:",
+        section_options,
+        horizontal=True,
+        label_visibility="collapsed",
+    )
+
+with st.spinner(f"Loading {election_year} precinct election data..."):
+    if election_year == "2026 General":
+        leg_full_df = get_election_data("legislative_races")
+        bal_full_df = get_election_data("ballot_measures")
+    else:
+        leg_full_df = get_election_data("electoral_results_2022")
+        bal_full_df = get_election_data("ballot_measures_2022")
     shapes_df = get_shapefile()
 
 loaded_counties = sorted(
     set(leg_full_df['County'].dropna().unique()).union(set(bal_full_df['County'].dropna().unique()))
 ) if ('County' in leg_full_df.columns or 'County' in bal_full_df.columns) else []
 
+year_short = "2026" if election_year == "2026 General" else "2022"
+election_date_str = ELECTION_DATES[election_year]
+
 st.markdown(f"""
 <div class="team-mo-banner">
     <div>
         <span class="brand-title">Team MO</span>
-        <span class="brand-sub">Missouri 2026 Precinct Election Results</span>
+        <span class="brand-sub">Missouri {year_short} Precinct Election Results</span>
     </div>
-    <div class="brand-meta">General Election · November 3, 2026 · {len(loaded_counties)} Jurisdictions Loaded</div>
+    <div class="brand-meta">General Election · {election_date_str} · {len(loaded_counties)} Jurisdictions Loaded</div>
 </div>
 """, unsafe_allow_html=True)
 
-dataset_type = st.radio(
-    "View Section:",
-    ["Ballot Initiatives", "State Legislature"],
-    horizontal=True,
-    label_visibility="collapsed",
-)
-
 full_election_df = bal_full_df if dataset_type == "Ballot Initiatives" else leg_full_df
 if full_election_df.empty:
-    st.error(f"No data found for {dataset_type}.")
+    st.error(f"No data file found for {election_year} — {dataset_type}. Run `download_all_data.py` to pull the CSVs.")
     st.stop()
 
 county_col = 'County' if 'County' in full_election_df.columns else 'county' if 'county' in full_election_df.columns else None
@@ -329,19 +380,25 @@ county_col = 'County' if 'County' in full_election_df.columns else 'county' if '
 # EDITORIAL HERO HEADER & SCORE CARDS
 # ==========================================
 if dataset_type == "Ballot Initiatives":
-    st.markdown("""
-    <div class="kicker">Missouri · November 3, 2026</div>
-    <h1 class="hero-title">Ballot Initiative Results</h1>
+    framing_note = (
+        "Our side = NO on Amendment 3 &amp; Prop A · YES on Amendment 6"
+        if election_year == "2026 General"
+        else "Statewide General Election Ballot Questions · Green = Yes · Terracotta = No"
+    )
+    st.markdown(f"""
+    <div class="kicker">Missouri · {election_date_str}</div>
+    <h1 class="hero-title">{year_short} Ballot Initiative Results</h1>
     <div style="margin-bottom: 1.1rem;">
         <span class="badge-pill">Precinct Results</span>
-        <span style="font-size: 0.78rem; opacity: 0.72;">Our side = NO on Amendment 3 &amp; Prop A · YES on Amendment 6</span>
+        <span style="font-size: 0.78rem; opacity: 0.72;">{framing_note}</span>
     </div>
     """, unsafe_allow_html=True)
 
-    # Render the 3-column GPS Impact Hero Cards across all loaded jurisdictions
-    card_cols = st.columns(3)
-    for idx, m_key in enumerate(["AMENDMENT 3", "AMENDMENT 6", "PROPOSITION A"]):
-        meta = MEASURE_META[m_key]
+    year_cards = MEASURE_META_BY_YEAR.get(election_year, {})
+    card_keys = list(year_cards.keys())
+    card_cols = st.columns(len(card_keys))
+    for idx, m_key in enumerate(card_keys):
+        meta = year_cards[m_key]
         m_df = bal_full_df[bal_full_df['race'].str.upper() == m_key].copy()
         if not m_df.empty:
             m_df['YES'] = pd.to_numeric(m_df['YES'], errors='coerce').fillna(0)
@@ -357,12 +414,10 @@ if dataset_type == "Ballot Initiatives":
             diff_pts = our_pct - other_pct
             diff_votes = abs(our_v - other_v)
 
-            # Yes > No determines whether measure Passed or Failed
             passed = yes_tot > no_tot
             status_text = f"{'Passed' if passed else 'Failed'} {'✓' if diff_pts > 0 else ''}"
             badge_cls = "status-badge-win" if diff_pts > 0 else "status-badge-loss"
 
-            # Count jurisdictions won by our side
             if county_col:
                 c_grp = m_df.groupby(county_col)[['YES', 'NO']].sum()
                 if meta['our_side'] == "YES":
@@ -374,6 +429,10 @@ if dataset_type == "Ballot Initiatives":
                 won_cnt, tot_cnt = 0, 0
 
             lead_side = meta['our_side'].title() if diff_pts >= 0 else meta['other_side'].title()
+            side_prefix = "Our side · " if election_year == "2026 General" else ""
+            other_prefix = "Other · " if election_year == "2026 General" else ""
+            foot_label = "Our side won" if election_year == "2026 General" else "Yes led in"
+
             with card_cols[idx]:
                 st.markdown(f"""
                 <div class="scorecard">
@@ -389,24 +448,34 @@ if dataset_type == "Ballot Initiatives":
                         <div class="split-bar-other" style="width: {other_pct:.2f}%;"></div>
                     </div>
                     <div class="split-labels">
-                        <span>Our side · {meta['our_side'].title()} {our_pct:.2f}% ({our_v:,})</span>
-                        <span>Other · {meta['other_side'].title()} {other_pct:.2f}% ({other_v:,})</span>
+                        <span>{side_prefix}{meta['our_side'].title()} {our_pct:.2f}% ({our_v:,})</span>
+                        <span>{other_prefix}{meta['other_side'].title()} {other_pct:.2f}% ({other_v:,})</span>
                     </div>
                     <div class="scorecard-margin">
                         <span style="opacity:0.72;">Margin: </span>
                         <b>{lead_side} +{abs(diff_pts):.2f} pts</b>
                         <span style="opacity:0.72;"> ({diff_votes:,} votes)</span>
                     </div>
-                    <div class="scorecard-foot">Our side won {won_cnt} of {tot_cnt} loaded jurisdictions</div>
+                    <div class="scorecard-foot">{foot_label} {won_cnt} of {tot_cnt} loaded jurisdictions</div>
                 </div>
                 """, unsafe_allow_html=True)
 else:
-    st.markdown("""
-    <div class="kicker">Missouri · November 3, 2026</div>
-    <h1 class="hero-title">State Legislature Precinct Results</h1>
+    hero_heading = (
+        "State Legislature Precinct Results"
+        if election_year == "2026 General"
+        else "2022 General Election Precinct Results"
+    )
+    hero_sub = (
+        "Missouri House &amp; Even-Numbered State Senate Districts"
+        if election_year == "2026 General"
+        else "U.S. Senate, State Auditor, U.S. House, State Senate &amp; State House"
+    )
+    st.markdown(f"""
+    <div class="kicker">Missouri · {election_date_str}</div>
+    <h1 class="hero-title">{hero_heading}</h1>
     <div style="margin-bottom: 0.75rem;">
         <span class="badge-pill">Precinct Results</span>
-        <span style="font-size: 0.78rem; opacity: 0.72;">Missouri House &amp; Even-Numbered State Senate Districts</span>
+        <span style="font-size: 0.78rem; opacity: 0.72;">{hero_sub}</span>
     </div>
     """, unsafe_allow_html=True)
 
@@ -416,7 +485,7 @@ else:
 st.markdown(f"""
 <div class="section-divider">
     <h2>Results by Precinct</h2>
-    <span>Select jurisdiction and {'measure' if dataset_type == 'Ballot Initiatives' else 'chamber / district'}</span>
+    <span>Select jurisdiction and {'measure' if dataset_type == 'Ballot Initiatives' else 'office / district'}</span>
 </div>
 """, unsafe_allow_html=True)
 
@@ -425,7 +494,7 @@ f_col1, f_col2, f_col3 = st.columns([1.1, 1.1, 1.3])
 if county_col:
     county_list = ["ALL"] + sorted(full_election_df[county_col].dropna().unique().tolist())
     with f_col1:
-        selected_county = st.selectbox("Jurisdiction / County:", county_list)
+        selected_county = st.selectbox("Jurisdiction / County:", county_list, key=f"county_{year_short}_{dataset_type}")
 else:
     selected_county = "ALL"
 
@@ -434,37 +503,53 @@ county_df = full_election_df[full_election_df[county_col] == selected_county].co
 race_totals = county_df.groupby('race')['total_votes'].sum()
 valid_races = race_totals[race_totals > 0].index.tolist()
 
-if dataset_type == "State Legislature":
+if dataset_type != "Ballot Initiatives":
+    chamber_opts = (
+        ["State House (HD)", "State Senate (SD)", "All Legislative"]
+        if election_year == "2026 General"
+        else ["Federal & Statewide", "State Senate (SD)", "State House (HD)", "All Races"]
+    )
     with f_col2:
-        chamber = st.selectbox("Chamber:", ["State House (HD)", "State Senate (SD)", "All Legislative"])
-    if chamber == "State House (HD)":
-        chamber_races = [r for r in valid_races if 'REP' in r.upper() or 'HOUSE' in r.upper()]
+        chamber = st.selectbox("Office / Chamber:", chamber_opts, key=f"chamber_{year_short}")
+    if chamber == "Federal & Statewide":
+        chamber_races = [
+            r for r in valid_races
+            if r.upper() in ["U.S. SENATOR", "STATE AUDITOR"] or r.upper().startswith("U.S. REPRESENTATIVE")
+        ]
+    elif chamber == "State House (HD)":
+        chamber_races = [r for r in valid_races if 'STATE REPRESENTATIVE' in r.upper() or 'HOUSE' in r.upper()]
     elif chamber == "State Senate (SD)":
-        chamber_races = [r for r in valid_races if 'SENAT' in r.upper()]
+        chamber_races = [r for r in valid_races if 'STATE SENAT' in r.upper()]
     else:
         chamber_races = valid_races
+
     sorted_races = sorted(chamber_races, key=natural_sort_key)
     with f_col3:
         if not sorted_races:
             st.warning("No districts with reported votes in this jurisdiction.")
             st.stop()
-        selected_race = st.selectbox("District:", ["ALL"] + sorted_races)
+        race_choices = (
+            sorted_races
+            if chamber == "Federal & Statewide"
+            else ["ALL"] + sorted_races
+        )
+        selected_race = st.selectbox("Race / District:", race_choices, key=f"race_{year_short}_{chamber}")
 else:
     sorted_races = sorted(valid_races, key=natural_sort_key)
     with f_col2:
         if not sorted_races:
             st.warning("No ballot measures found for this selection.")
             st.stop()
-        selected_race = st.selectbox("2026 Measure:", sorted_races)
+        selected_race = st.selectbox(f"{year_short} Measure:", sorted_races, key=f"bal_{year_short}")
     with f_col3:
-        st.caption("Color scale: Green = Our side ahead · Rust/Terracotta = Other side ahead")
+        st.caption("Color scale: Green = Our side / Yes ahead · Rust/Terracotta = Other side / No ahead")
 
 election_df = county_df[county_df['race'].isin(sorted_races)].copy() if selected_race == "ALL" else county_df[county_df['race'] == selected_race].copy()
 
 if not election_df.empty:
     raw_df = pd.merge(election_df, shapes_df[['mapping_precinct_code', 'geometry']], on='mapping_precinct_code', how='left')
 
-    if dataset_type == "State Legislature":
+    if dataset_type != "Ballot Initiatives":
         dem_cols = [c for c in raw_df.columns if 'DEM' in c.upper()]
         rep_cols = [c for c in raw_df.columns if 'REP' in c.upper()]
         raw_df['Unified_Blue'] = raw_df[dem_cols].apply(pd.to_numeric, errors='coerce').fillna(0).sum(axis=1) if dem_cols else 0
@@ -474,11 +559,15 @@ if not election_df.empty:
     else:
         raw_df['YES'] = pd.to_numeric(raw_df.get('YES', 0), errors='coerce').fillna(0)
         raw_df['NO'] = pd.to_numeric(raw_df.get('NO', 0), errors='coerce').fillna(0)
-        if "AMENDMENT 6" in str(selected_race).upper():
+        our_side_choice = get_measure_our_side(election_year, selected_race)
+        if our_side_choice == "YES":
             raw_df['Unified_Blue'] = raw_df['YES']
             raw_df['Unified_Red'] = raw_df['NO']
-            blue_label, red_label, pct_label = 'YES Votes (Our side)', 'NO Votes (Other side)', 'YES %'
-            our_side_name, other_side_name = 'Yes (Our side)', 'No (Other side)'
+            blue_label = 'YES Votes (Our side)' if election_year == "2026 General" else 'YES Votes'
+            red_label = 'NO Votes (Other side)' if election_year == "2026 General" else 'NO Votes'
+            pct_label = 'YES %'
+            our_side_name = 'Yes (Our side)' if election_year == "2026 General" else 'Yes'
+            other_side_name = 'No (Other side)' if election_year == "2026 General" else 'No'
         else:
             raw_df['Unified_Blue'] = raw_df['NO']
             raw_df['Unified_Red'] = raw_df['YES']
@@ -517,11 +606,9 @@ if not election_df.empty:
     master_df.loc[master_df['total_votes'] < 5, 'Margin'] = gray_label
     bucket_labels_full = bucket_labels + [gray_label]
 
-    # Split mapped vs unmapped/absentee
     absentee_df = master_df[master_df['geometry'].isna()].copy()
     gdf = gpd.GeoDataFrame(master_df.dropna(subset=['geometry']).copy(), geometry='geometry', crs="EPSG:4326")
 
-    # Region totals
     tot_reg_votes = int(master_df['total_votes'].sum())
     tot_reg_blue = int(master_df['Unified_Blue'].sum())
     tot_reg_red = int(master_df['Unified_Red'].sum())
@@ -529,14 +616,12 @@ if not election_df.empty:
     pct_reg_red = (tot_reg_red / tot_reg_votes * 100) if tot_reg_votes > 0 else 0.0
     reg_spread = pct_reg_blue - pct_reg_red
 
-    # Quick Zoom Presets matching Team MO
     zoom_preset = st.radio(
         "Map Viewport:",
         ["Whole Selection", "St. Louis Metro", "Kansas City Metro", "Springfield / SW MO"],
         horizontal=True,
     )
 
-    # GPS Impact 1.45fr : 1fr Split Layout (Map on Left, Summary & Discrete Legend on Right)
     map_col, info_col = st.columns([1.5, 1.0])
 
     bucket_colors = {
@@ -614,7 +699,6 @@ if not election_df.empty:
             st.warning("No mappable precinct polygons found for this selection.")
 
     with info_col:
-        # Region Summary Scorecard
         win_side = our_side_name if reg_spread >= 0 else other_side_name
         win_cls = "status-badge-win" if reg_spread >= 0 else "status-badge-loss"
         prec_won = int((master_df[master_df['total_votes'] > 0]['Unified_Blue'] > master_df[master_df['total_votes'] > 0]['Unified_Red']).sum())
@@ -624,7 +708,7 @@ if not election_df.empty:
         <div class="scorecard" style="height: auto; margin-bottom: 1rem;">
             <div class="scorecard-top">
                 <div>
-                    <div class="kicker" style="margin-bottom:0;">{selected_county}</div>
+                    <div class="kicker" style="margin-bottom:0;">{selected_county} · {year_short}</div>
                     <div class="scorecard-title" style="font-size:1.15rem;">{selected_race}</div>
                 </div>
                 <span class="{win_cls}">{win_side} +{abs(reg_spread):.2f} pts</span>
@@ -643,7 +727,6 @@ if not election_df.empty:
         </div>
         """, unsafe_allow_html=True)
 
-        # GPS Impact 14-Step Horizontal Color Strip Legend
         st.markdown(f"""
         <div style="margin-bottom: 1rem;">
             <div style="display:flex; justify-content:space-between; font-size:0.75rem; opacity:0.75; margin-bottom:4px;">
@@ -676,7 +759,6 @@ if not election_df.empty:
         </div>
         """, unsafe_allow_html=True)
 
-        # Absentee / Unmapped Callout
         if not absentee_df.empty:
             tot_abs = int(absentee_df['total_votes'].sum())
             tot_blue_abs = int(absentee_df['Unified_Blue'].sum())
@@ -684,9 +766,14 @@ if not election_df.empty:
             if tot_abs > 0:
                 abs_b_pct = tot_blue_abs / tot_abs * 100
                 abs_r_pct = tot_red_abs / tot_abs * 100
+                unmapped_note = (
+                    "Absentee / Unmapped Polygons (incl. STL City 2022 28-Ward Precincts):"
+                    if election_year == "2022 General"
+                    else "Absentee / Central Count (Unmapped Polygons):"
+                )
                 st.markdown(f"""
                 <div class="absentee-banner">
-                    <b>Absentee / Central Count (Unmapped Polygons):</b><br>
+                    <b>{unmapped_note}</b><br>
                     {tot_abs:,} ballots · <b>{tot_blue_abs:,}</b> {our_side_name} ({abs_b_pct:.1f}%) · <b>{tot_red_abs:,}</b> {other_side_name} ({abs_r_pct:.1f}%)
                 </div>
                 """, unsafe_allow_html=True)
@@ -733,7 +820,7 @@ if not election_df.empty:
     st.download_button(
         label="Download Precinct Table (CSV)",
         data=csv_bytes,
-        file_name=f"mo_2026_{selected_county}_{selected_race}.csv".replace(" ", "_").lower(),
+        file_name=f"mo_{year_short}_{selected_county}_{selected_race}.csv".replace(" ", "_").lower(),
         mime="text/csv",
     )
 
@@ -753,19 +840,19 @@ if not election_df.empty:
     # SECTION 3: MEASURE VS. MEASURE / CROSS-RACE SCATTER (BALLOT VIEW)
     # ==========================================
     if dataset_type == "Ballot Initiatives" and len(sorted_races) >= 2:
-        st.markdown("""
+        st.markdown(f"""
         <div class="section-divider">
             <h2>Ballot Measure vs. Ballot Measure (Precinct Scatter)</h2>
-            <span>Compare our side's vote share across two 2026 measures</span>
+            <span>Compare vote share across two {year_short} measures</span>
         </div>
         """, unsafe_allow_html=True)
 
         sc1, sc2 = st.columns(2)
         with sc1:
-            m_x = st.selectbox("Horizontal Axis (Baseline Measure):", sorted_races, index=0, key="scatter_x")
+            m_x = st.selectbox("Horizontal Axis (Baseline Measure):", sorted_races, index=0, key=f"scatter_x_{year_short}")
         with sc2:
             default_y = min(2, len(sorted_races) - 1)
-            m_y = st.selectbox("Vertical Axis (Comparison Measure):", sorted_races, index=default_y, key="scatter_y")
+            m_y = st.selectbox("Vertical Axis (Comparison Measure):", sorted_races, index=default_y, key=f"scatter_y_{year_short}")
 
         def get_our_share_df(measure_name):
             sub = county_df[county_df['race'] == measure_name].copy()
@@ -774,7 +861,8 @@ if not election_df.empty:
             grp_cols = ['mapping_precinct_code', precinct_col] + ([county_col] if county_col else [])
             g = sub.groupby(grp_cols)[['YES', 'NO', 'total_votes']].sum().reset_index()
             g = g[g['total_votes'] >= 5]
-            if "AMENDMENT 6" in measure_name.upper():
+            side = get_measure_our_side(election_year, measure_name)
+            if side == "YES":
                 g['our_pct'] = g['YES'] / (g['YES'] + g['NO']) * 100
             else:
                 g['our_pct'] = g['NO'] / (g['YES'] + g['NO']) * 100
@@ -814,8 +902,8 @@ if not election_df.empty:
                     'Status': False,
                 },
                 labels={
-                    'X_Pct': f"Our side on {m_x} (%)",
-                    'Y_Pct': f"Our side on {m_y} (%)",
+                    'X_Pct': f"{m_x} (%)",
+                    'Y_Pct': f"{m_y} (%)",
                     'Diff_Pts': 'Difference (pts)',
                     'Votes_X': 'Ballots Cast',
                 },
