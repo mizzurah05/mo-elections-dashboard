@@ -1,0 +1,6 @@
+﻿[theme]
+primaryColor = "#1e4e8c"
+font = "sans serif"
+baseRadius = "8px"
+paddingTop = "1.25rem"
+paddingBottom = "3rem"
